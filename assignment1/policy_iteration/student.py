@@ -8,8 +8,8 @@ def reward_function(s, env_size):
     return 0
 def is_state_valid(s_prime,env_size,holes):
     if s_prime[0] < env_size and s_prime[1] < env_size and (s_prime >= 0).all():
-        if holes[s_prime[0], s_prime[1]] == 0 :
-            return True
+        #if holes[s_prime[0], s_prime[1]] == 0 :
+        return True
     return False
 
 def transition_probabilities(env, s, a, env_size, directions, holes):
@@ -27,6 +27,6 @@ def transition_probabilities(env, s, a, env_size, directions, holes):
     
     if (is_state_valid(s_prime_random,env_size,holes)):
         prob_next_state[s_prime_random[0],s_prime_random[1]] =  0.5
-           
+    #print(prob_next_state)
 
     return prob_next_state
