@@ -1,5 +1,12 @@
 import numpy as np
 
+def compute_reward(env,state,action,views,clicks,Q):
+    if views[state, action] > 0 and clicks[state, action] > 0:
+        #print("RES" + str(env.CTR[state][action] / (clicks[state, action] / views[state, action])))
+        return env.CTR[state][action] / (clicks[state, action] / views[state, action])
+    else:
+        return 0
+    
 
 def explore_and_commit(env, explore_steps = 50, iters = 200):
     clicks = np.zeros((env.n_states, env.n_actions))
@@ -12,23 +19,33 @@ def explore_and_commit(env, explore_steps = 50, iters = 200):
     # Explore
     for i in range(explore_steps):
         state = env.observe()
-        action = ...
-        click = env.step(action)
-        views[state, action] = ...
-        clicks[state, action] = ...
-        Q[state, action] = ...
-        total_reward = ...
-        best_action = env.CTR[state,:].argmax()
-        regret += ...
-        Qs.append(Q.copy())
+        action = np.random.randint(0, env.n_actions) #TODO
+        print(i,state,action)
 
+        #print(env.CTR[state][action])
+        click = env.step(action)
+        views[state, action] += 1 #TODO
+        clicks[state, action] += click #TODO
+        Q[state, action] += compute_reward(env,state,action,views,clicks,Q) * click
+        print("STEP REWARD: " + str(Q[state, action]))
+        total_reward += env.CTR[state][action] * click #TODO
+        #print("TOTAL REWARD: " + str(total_reward))
+        best_action = env.CTR[state,:].argmax()
+        print("BEST REWARD: " + str(env.CTR[state][best_action]))
+        regret += env.CTR[state][best_action] - env.CTR[state][action] * click #TODO
+        print("TOTAL REGRET: " + str(regret))
+
+        Qs.append(Q.copy())
+    #print("START COMMIT")
     # Commit
     for i in range(iters-explore_steps):
         state = env.observe()
-        action = ...
+        #print(best_action)
+        action = Q[state].argmax()
         click = env.step(action)
-        total_reward = ...
-        regret += ...
+        total_reward += env.CTR[state][action] * click
+        best_action = env.CTR[state,:].argmax()
+        regret += env.CTR[state][best_action] - env.CTR[state][action] * click
 
     return Qs, total_reward, regret
 
