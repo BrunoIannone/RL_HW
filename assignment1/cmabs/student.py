@@ -1,18 +1,7 @@
 import numpy as np
 
 def compute_reward(env,state,action,views,clicks,click,Q):
-    # if(views[state, action]-1 > 0):
-    #     old_p = (clicks[state, action]-click)/(views[state, action]-1)
-    #     old_r = old_p * Q[state, action]
-    #     new_p = (clicks[state, action])/(views[state, action])
-    #     step_reward = env.CTR[state][action]*click
-    #     new_r = new_p*(old_r + step_reward)
-    #     return new_r
-    # else:
-    #     new_p = (clicks[state, action])/(views[state, action])
-    #     new_r = new_p*(env.CTR[state][action]*click)
-    #     return new_r
-
+    
     return (env.CTR[state][action]*click)/(1/env.n_actions)
 
     
