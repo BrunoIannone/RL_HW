@@ -1,11 +1,20 @@
 import numpy as np
 
-def compute_reward(env,state,action,views,clicks,Q):
-    if views[state, action] > 0 and clicks[state, action] > 0:
-        #print("RES" + str(env.CTR[state][action] / (clicks[state, action] / views[state, action])))
-        return env.CTR[state][action] / (clicks[state, action] / views[state, action])
-    else:
-        return 0
+def compute_reward(env,state,action,views,clicks,click,Q):
+    # if(views[state, action]-1 > 0):
+    #     old_p = (clicks[state, action]-click)/(views[state, action]-1)
+    #     old_r = old_p * Q[state, action]
+    #     new_p = (clicks[state, action])/(views[state, action])
+    #     step_reward = env.CTR[state][action]*click
+    #     new_r = new_p*(old_r + step_reward)
+    #     return new_r
+    # else:
+    #     new_p = (clicks[state, action])/(views[state, action])
+    #     new_r = new_p*(env.CTR[state][action]*click)
+    #     return new_r
+
+    return (env.CTR[state][action]*click)/(1/env.n_actions)
+
     
 
 def explore_and_commit(env, explore_steps = 50, iters = 200):
@@ -25,15 +34,22 @@ def explore_and_commit(env, explore_steps = 50, iters = 200):
         #print(env.CTR[state][action])
         click = env.step(action)
         views[state, action] += 1 #TODO
+        print("VIEWS: " + str(views[state, action]))
+
         clicks[state, action] += click #TODO
-        Q[state, action] += compute_reward(env,state,action,views,clicks,Q) * click
-        print("STEP REWARD: " + str(Q[state, action]))
+        print("CLICKS: " + str(clicks[state, action]))
+
+        Q[state, action] += compute_reward(env,state,action,views,clicks,click,Q)
+        print(Q)
+        print("ESTIMATOR: " + str(Q[state, action]))
+
+        print("STEP REWARD: " + str(env.CTR[state][action]))
         total_reward += env.CTR[state][action] * click #TODO
-        #print("TOTAL REWARD: " + str(total_reward))
+        print("TOTAL REWARD: " + str(total_reward))
         best_action = env.CTR[state,:].argmax()
-        print("BEST REWARD: " + str(env.CTR[state][best_action]))
+        #print("BEST REWARD: " + str(env.CTR[state][best_action]))
         regret += env.CTR[state][best_action] - env.CTR[state][action] * click #TODO
-        print("TOTAL REGRET: " + str(regret))
+        #print("TOTAL REGRET: " + str(regret))
 
         Qs.append(Q.copy())
     #print("START COMMIT")
