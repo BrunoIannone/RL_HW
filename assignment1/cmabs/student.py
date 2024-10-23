@@ -1,6 +1,6 @@
 import numpy as np
 
-def explore_and_commit(env, explore_steps = 500, iters = 2000):
+def explore_and_commit(env, explore_steps = 50, iters = 200):
     clicks = np.zeros((env.n_states, env.n_actions))
     views = np.zeros((env.n_states, env.n_actions))
     Q = np.zeros((env.n_states, env.n_actions))
@@ -41,7 +41,7 @@ def choose_action(env,epsilon, Q,state):
     
     return action
 
-def epsilon_greedy(env, epsilon = 0.1, null_epsilon_after = 500, iters = 2000):
+def epsilon_greedy(env, epsilon = 0.1, null_epsilon_after = 50, iters = 200):
     clicks = np.zeros((env.n_states, env.n_actions))
     views = np.zeros((env.n_states, env.n_actions))
     Q = np.zeros((env.n_states, env.n_actions))
