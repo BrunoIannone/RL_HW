@@ -1,12 +1,6 @@
 import numpy as np
 
-def compute_reward(env,state,action,views,clicks,click,Q):
-    
-    return (env.CTR[state][action]*click)/(1/env.n_actions)
-
-    
-
-def explore_and_commit(env, explore_steps = 50, iters = 200):
+def explore_and_commit(env, explore_steps = 500, iters = 2000):
     clicks = np.zeros((env.n_states, env.n_actions))
     views = np.zeros((env.n_states, env.n_actions))
     Q = np.zeros((env.n_states, env.n_actions))
@@ -18,44 +12,36 @@ def explore_and_commit(env, explore_steps = 50, iters = 200):
     for i in range(explore_steps):
         state = env.observe()
         action = np.random.randint(0, env.n_actions) #TODO
-        print(i,state,action)
-
-        #print(env.CTR[state][action])
         click = env.step(action)
         views[state, action] += 1 #TODO
-        print("VIEWS: " + str(views[state, action]))
-
         clicks[state, action] += click #TODO
-        print("CLICKS: " + str(clicks[state, action]))
-
-        Q[state, action] += compute_reward(env,state,action,views,clicks,click,Q)
-        print(Q)
-        print("ESTIMATOR: " + str(Q[state, action]))
-
-        print("STEP REWARD: " + str(env.CTR[state][action]))
-        total_reward += env.CTR[state][action] * click #TODO
-        print("TOTAL REWARD: " + str(total_reward))
+        Q[state, action] = clicks[state, action]/views[state, action]
+        total_reward += click #TODO
         best_action = env.CTR[state,:].argmax()
-        #print("BEST REWARD: " + str(env.CTR[state][best_action]))
-        regret += env.CTR[state][best_action] - env.CTR[state][action] * click #TODO
-        #print("TOTAL REGRET: " + str(regret))
+        regret += env.CTR[state][best_action] - click #TODO
 
         Qs.append(Q.copy())
-    #print("START COMMIT")
+
     # Commit
     for i in range(iters-explore_steps):
         state = env.observe()
-        #print(best_action)
         action = Q[state].argmax()
         click = env.step(action)
-        total_reward += env.CTR[state][action] * click
+        total_reward +=  click
         best_action = env.CTR[state,:].argmax()
-        regret += env.CTR[state][best_action] - env.CTR[state][action] * click
+        regret += env.CTR[state][best_action] - click
 
     return Qs, total_reward, regret
 
+def choose_action(env,epsilon, Q,state):
+    if np.random.uniform(0, 1) < epsilon:
+        action = np.random.randint(0, env.n_actions)
+    else:
+        action = np.argmax(Q[state])
+    
+    return action
 
-def epsilon_greedy(env, epsilon = 0.1, null_epsilon_after = 50, iters = 200):
+def epsilon_greedy(env, epsilon = 0.1, null_epsilon_after = 500, iters = 2000):
     clicks = np.zeros((env.n_states, env.n_actions))
     views = np.zeros((env.n_states, env.n_actions))
     Q = np.zeros((env.n_states, env.n_actions))
@@ -66,23 +52,23 @@ def epsilon_greedy(env, epsilon = 0.1, null_epsilon_after = 50, iters = 200):
     # "Explore" (epsilon is non-zero)
     for i in range(null_epsilon_after):
         state = env.observe()
-        action = ...
+        action = choose_action(env,epsilon,Q,state)
         click = env.step(action)
-        views[state, action] = ...
-        clicks[state, action] = ...
-        Q[state, action] = ...
-        total_reward = ...
+        views[state, action] +=1
+        clicks[state, action] += click
+        Q[state, action] = clicks[state, action]/views[state, action]
+        total_reward +=click
         best_action = env.CTR[state,:].argmax()
-        regret += ...
+        regret += env.CTR[state][best_action] - click
         Qs.append(Q.copy())
 
     # "Commit" (epsilon set to 0)
     for i in range(iters-null_epsilon_after):
         state = env.observe()
-        action = ...
+        action = Q[state].argmax()
         click = env.step(action)
-        total_reward = ...
+        total_reward +=click
         best_action = env.CTR[state,:].argmax()
-        regret += ...
+        regret += env.CTR[state][best_action] - click
 
     return Qs, total_reward, regret
