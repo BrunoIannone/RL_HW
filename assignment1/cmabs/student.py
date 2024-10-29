@@ -18,7 +18,7 @@ def explore_and_commit(env, explore_steps = 50, iters = 200):
         Q[state, action] = clicks[state, action]/views[state, action]
         total_reward += click #TODO
         best_action = env.CTR[state,:].argmax()
-        regret += env.CTR[state][best_action] - click #TODO
+        regret += env.CTR[state][best_action] - env.CTR[state][action] #TODO
 
         Qs.append(Q.copy())
 
@@ -29,7 +29,7 @@ def explore_and_commit(env, explore_steps = 50, iters = 200):
         click = env.step(action)
         total_reward +=  click
         best_action = env.CTR[state,:].argmax()
-        regret += env.CTR[state][best_action] - click
+        regret += env.CTR[state][best_action] - env.CTR[state][action]
 
     return Qs, total_reward, regret
 
@@ -59,7 +59,7 @@ def epsilon_greedy(env, epsilon = 0.1, null_epsilon_after = 50, iters = 200):
         Q[state, action] = clicks[state, action]/views[state, action]
         total_reward +=click
         best_action = env.CTR[state,:].argmax()
-        regret += env.CTR[state][best_action] - click
+        regret += env.CTR[state][best_action] - env.CTR[state][action]
         Qs.append(Q.copy())
 
     # "Commit" (epsilon set to 0)
@@ -69,6 +69,6 @@ def epsilon_greedy(env, epsilon = 0.1, null_epsilon_after = 50, iters = 200):
         click = env.step(action)
         total_reward +=click
         best_action = env.CTR[state,:].argmax()
-        regret += env.CTR[state][best_action] - click
+        regret += env.CTR[state][best_action] - env.CTR[state][action]
 
     return Qs, total_reward, regret
