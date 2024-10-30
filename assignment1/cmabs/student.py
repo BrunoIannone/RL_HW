@@ -1,5 +1,5 @@
 import numpy as np
-
+import time
 def explore_and_commit(env, explore_steps = 50, iters = 200):
     clicks = np.zeros((env.n_states, env.n_actions))
     views = np.zeros((env.n_states, env.n_actions))
