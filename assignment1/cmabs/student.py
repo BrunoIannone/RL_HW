@@ -35,9 +35,9 @@ def explore_and_commit(env, explore_steps = 50, iters = 200):
 
 def choose_action(env,epsilon, Q,state):
     if np.random.uniform(0, 1) < epsilon:
-        action = np.random.randint(0, env.n_actions)
+        action = np.random.randint(0, env.n_actions) # Explore
     else:
-        action = np.argmax(Q[state])
+        action = np.argmax(Q[state]) # Exploit
     
     return action
 

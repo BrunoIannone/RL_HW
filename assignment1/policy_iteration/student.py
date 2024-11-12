@@ -16,12 +16,12 @@ def transition_probabilities(env, s, a, env_size, directions, holes):
 
     prob_next_state = np.zeros((env_size, env_size))
     
-    s_prime_correct = s + directions[a]
+    s_prime_correct = s + directions[a] # Intended action
     if (is_state_valid(s_prime_correct,env_size)):
         prob_next_state[s_prime_correct[0],s_prime_correct[1]] = 0.5
         probs.append(0.5)
         
-    if(a==0):
+    if(a==0): # Random action
         s_prime_random = s + directions[len(directions)-1]
     else:
         s_prime_random = s + directions[a-1]
