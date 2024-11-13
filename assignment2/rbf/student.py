@@ -10,6 +10,7 @@ import sklearn.preprocessing
 from sklearn.kernel_approximation import RBFSampler
 import pickle
 
+import time
 
 class VanillaFeatureEncoder:
     def __init__(self, env):
@@ -37,7 +38,7 @@ class RBFFeatureEncoder:
     def size(self): # modify
         # TODO return the number of features
         return self.rbf_feature.n_components
-
+    
 class TDLambda_LVFA:
     def __init__(self, env, feature_encoder_cls=RBFFeatureEncoder, alpha=0.01, alpha_decay=1, 
                  gamma=0.9999, epsilon=0.3, epsilon_decay=0.995, final_epsilon=0.2, lambda_=0.9): # modify if you want (e.g. for forward view)
@@ -57,17 +58,22 @@ class TDLambda_LVFA:
     def Q(self, feats):
         feats = feats.reshape(-1,1)
         return self.weights@feats
-    
     def update_transition(self, s, action, s_prime, reward, done): # modify
-        if not done:
-            s_feats = self.feature_encoder.encode(s)
-            s_prime_feats = self.feature_encoder.encode(s_prime)
-            # TODO update the weights
-            #print("QUESTO" + str(self.Q(s_prime_feats)))
+        s_feats = self.feature_encoder.encode(s)
+        s_prime_feats = self.feature_encoder.encode(s_prime)
+        # TODO update the weights
+        #print("QUESTO" + str(self.Q(s_prime_feats)))
+        #print("Q_S_PRIME",self.Q(s_prime_feats))
+        next_action = self.Q(s_prime_feats).argmax()
+        #print("NEXT ACTION",next_action)
 
-            delta = reward + self.gamma*self.Q(s_prime_feats)[action].max() - self.Q(s_feats)[action]
-            e_t = self.gamma*self.lambda_*self.traces + s_feats
-            self.weights[action] -= self.alpha*delta*e_t[action]
+        delta = reward + self.gamma*self.Q(s_prime_feats)[next_action]*(1-done) - self.Q(s_feats)[action]
+        self.traces = self.gamma*self.lambda_*self.traces + s_feats
+        #self.traces[action] = self.traces[action] + s_feats                                                 # e_t
+        #print("traces",self.traces.shape,"S_FEATS",s_feats.shape)
+        #time.sleep(2)
+
+        self.weights[action] += self.alpha*delta*self.traces[action]
             
     def update_alpha_epsilon(self): # do not touch
         self.epsilon = max(self.final_epsilon, self.epsilon*self.epsilon_decay)
@@ -84,7 +90,7 @@ class TDLambda_LVFA:
         return self.policy(state)
        
         
-    def train(self, n_episodes=200, max_steps_per_episode=200): # do not touch
+    def train(self, n_episodes=300, max_steps_per_episode=300): # do not touch
         print(f'ep | eval | epsilon | alpha')
         for episode in range(n_episodes):
             done = False
