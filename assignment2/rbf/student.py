@@ -25,17 +25,18 @@ class VanillaFeatureEncoder:
 class RBFFeatureEncoder:
     def __init__(self, env): # modify
         self.env = env
-        # TODO init rbf encoder
-        ...
+        self.rbf_feature = RBFSampler(gamma=1, random_state=1) # TODO init rbf encoder
+        
 
     def encode(self, state): # modify
-        # TODO use the rbf encoder to return the features
-        return ...
+        features = self.rbf_feature.fit_transform(state.reshape(1, -1))# TODO use the rbf encoder to return the features
+        
+        return features
 
     @property
     def size(self): # modify
         # TODO return the number of features
-        return ...
+        return self.rbf_feature.n_components
 
 class TDLambda_LVFA:
     def __init__(self, env, feature_encoder_cls=RBFFeatureEncoder, alpha=0.01, alpha_decay=1, 
@@ -58,11 +59,16 @@ class TDLambda_LVFA:
         return self.weights@feats
     
     def update_transition(self, s, action, s_prime, reward, done): # modify
-        s_feats = self.feature_encoder.encode(s)
-        s_prime_feats = self.feature_encoder.encode(s_prime)
-        # TODO update the weights
-        self.weights[action] += ...
-        
+        if not done:
+            s_feats = self.feature_encoder.encode(s)
+            s_prime_feats = self.feature_encoder.encode(s_prime)
+            # TODO update the weights
+            #print("QUESTO" + str(self.Q(s_prime_feats)))
+
+            delta = reward + self.gamma*self.Q(s_prime_feats)[action].max() - self.Q(s_feats)[action]
+            e_t = self.gamma*self.lambda_*self.traces + s_feats
+            self.weights[action] -= self.alpha*delta*e_t[action]
+            
     def update_alpha_epsilon(self): # do not touch
         self.epsilon = max(self.final_epsilon, self.epsilon*self.epsilon_decay)
         self.alpha = self.alpha*self.alpha_decay
