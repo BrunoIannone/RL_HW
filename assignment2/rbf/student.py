@@ -26,18 +26,22 @@ class VanillaFeatureEncoder:
 class RBFFeatureEncoder:
     def __init__(self, env): # modify
         self.env = env
-        self.rbf_feature = RBFSampler(gamma=1, random_state=1) # TODO init rbf encoder
-        
+        self.rbf_sampler = RBFSampler(gamma=1, random_state=1) # TODO init rbf encoder
+        self.standard_scaler = sklearn.preprocessing.StandardScaler()
+        data = np.array([env.observation_space.sample() for x in range(10000)])
+        scaled_data = self.standard_scaler.fit_transform(data)
+        #transformed_data = self.standard_scaler.transform(data)
+        self.rbf_sampler.fit(scaled_data)# TODO use the rbf encoder to return the features
+
 
     def encode(self, state): # modify
-        features = self.rbf_feature.fit_transform(state.reshape(1, -1))# TODO use the rbf encoder to return the features
-        
-        return features
+        state = self.standard_scaler.transform([state])
+        return self.rbf_sampler.transform(state).reshape(-1)
 
     @property
     def size(self): # modify
         # TODO return the number of features
-        return self.rbf_feature.n_components
+        return self.rbf_sampler.n_components
     
 class TDLambda_LVFA:
     def __init__(self, env, feature_encoder_cls=RBFFeatureEncoder, alpha=0.01, alpha_decay=1, 
@@ -64,12 +68,11 @@ class TDLambda_LVFA:
         # TODO update the weights
         #print("QUESTO" + str(self.Q(s_prime_feats)))
         #print("Q_S_PRIME",self.Q(s_prime_feats))
-        next_action = self.Q(s_prime_feats).argmax()
+        
         #print("NEXT ACTION",next_action)
-
-        delta = reward + self.gamma*self.Q(s_prime_feats)[next_action]*(1-done) - self.Q(s_feats)[action]
-        self.traces = self.gamma*self.lambda_*self.traces + s_feats
-        #self.traces[action] = self.traces[action] + s_feats                                                 # e_t
+        delta = reward + self.gamma*self.Q(s_prime_feats).max()*(1-done) - self.Q(s_feats)[action]
+        self.traces = self.gamma*self.lambda_*self.traces
+        self.traces[action] +=  s_feats                                                 # e_t
         #print("traces",self.traces.shape,"S_FEATS",s_feats.shape)
         #time.sleep(2)
 
@@ -90,7 +93,7 @@ class TDLambda_LVFA:
         return self.policy(state)
        
         
-    def train(self, n_episodes=300, max_steps_per_episode=300): # do not touch
+    def train(self, n_episodes=200, max_steps_per_episode=200): # do not touch
         print(f'ep | eval | epsilon | alpha')
         for episode in range(n_episodes):
             done = False
