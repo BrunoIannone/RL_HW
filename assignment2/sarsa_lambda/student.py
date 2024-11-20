@@ -31,7 +31,7 @@ def sarsa_lambda(env, alpha=0.2, gamma=0.99, lambda_= 0.9, initial_epsilon=1.0, 
     received_first_reward = False
 
     for ep in tqdm(range(n_episodes)):
-        E = np.zeros((env.observation_space.n, env.action_space.n)) #Re-initialize E[s,a] to 0s
+        E = np.zeros((env.observation_space.n, env.action_space.n)) #Re-initialize E[s,a] to 0
         ep_len = 0
         state, _ = env.reset()
         action = epsilon_greedy_action(env, Q, state, epsilon)
