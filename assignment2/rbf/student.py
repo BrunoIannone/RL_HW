@@ -71,12 +71,13 @@ class TDLambda_LVFA:
         
         #print("NEXT ACTION",next_action)
         delta = reward + self.gamma*self.Q(s_prime_feats).max()*(1-done) - self.Q(s_feats)[action]
-        self.traces = self.gamma*self.lambda_*self.traces
+        
         self.traces[action] +=  s_feats                                                 # e_t
         #print("traces",self.traces.shape,"S_FEATS",s_feats.shape)
         #time.sleep(2)
-
+        self.traces = self.gamma*self.lambda_*self.traces
         self.weights[action] += self.alpha*delta*self.traces[action]
+        
             
     def update_alpha_epsilon(self): # do not touch
         self.epsilon = max(self.final_epsilon, self.epsilon*self.epsilon_decay)
