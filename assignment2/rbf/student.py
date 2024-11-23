@@ -26,11 +26,12 @@ class VanillaFeatureEncoder:
 class RBFFeatureEncoder:
     def __init__(self, env): # modify
         self.env = env
+        
         self.rbf_sampler = RBFSampler(gamma=1, random_state=1) # TODO init rbf encoder
         self.standard_scaler = sklearn.preprocessing.StandardScaler()
+        
         data = np.array([env.observation_space.sample() for x in range(10000)])
         scaled_data = self.standard_scaler.fit_transform(data)
-        #transformed_data = self.standard_scaler.transform(data)
         self.rbf_sampler.fit(scaled_data)# TODO use the rbf encoder to return the features
 
 
@@ -40,7 +41,6 @@ class RBFFeatureEncoder:
 
     @property
     def size(self): # modify
-        # TODO return the number of features
         return self.rbf_sampler.n_components
     
 class TDLambda_LVFA:
@@ -65,17 +65,12 @@ class TDLambda_LVFA:
     def update_transition(self, s, action, s_prime, reward, done): # modify
         s_feats = self.feature_encoder.encode(s)
         s_prime_feats = self.feature_encoder.encode(s_prime)
-        # TODO update the weights
-        #print("QUESTO" + str(self.Q(s_prime_feats)))
-        #print("Q_S_PRIME",self.Q(s_prime_feats))
         
-        #print("NEXT ACTION",next_action)
         delta = reward + self.gamma*self.Q(s_prime_feats).max()*(1-done) - self.Q(s_feats)[action]
         
-        self.traces[action] +=  s_feats                                                 # e_t
-        #print("traces",self.traces.shape,"S_FEATS",s_feats.shape)
-        #time.sleep(2)
+        self.traces[action] +=  s_feats                        
         self.traces = self.gamma*self.lambda_*self.traces
+        
         self.weights[action] += self.alpha*delta*self.traces[action]
         
             

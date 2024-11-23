@@ -44,7 +44,6 @@ def sarsa_lambda(env, alpha=0.2, gamma=0.99, lambda_= 0.9, initial_epsilon=1.0, 
             # env.render()
             next_action = epsilon_greedy_action(env, Q, next_state, epsilon)
 
-            # TODO update q table and eligibility
             delta = reward + gamma*Q[next_state,next_action] *(1-done)- Q[state,action]
             E[state,action] += 1
             
