@@ -3,7 +3,45 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from collections import namedtuple, deque
+import utils ##
+from typing import List ##
+from collections import namedtuple, deque ## 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class SimpleCNN(nn.Module):
+    def __init__(self, num_classes=10):  # Puoi cambiare il numero di classi
+        super(SimpleCNN, self).__init__()
+        # Primo blocco convoluzionale
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3, stride=1, padding=1)  # output: 16 x 84 x 96
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)  # output: 16 x 42 x 48
+
+        # Secondo blocco convoluzionale
+        self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=1, padding=1)  # output: 32 x 42 x 48
+        # Dopo MaxPooling: output: 32 x 21 x 24
+
+        # Terzo blocco convoluzionale
+        self.conv3 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1)  # output: 64 x 21 x 24
+        # Dopo MaxPooling: output: 64 x 10 x 12
+
+        # Fully connected layer
+        self.fc1 = nn.Linear(in_features=64 * 10 * 12, out_features=128)  # Primo livello fully connected
+        self.fc2 = nn.Linear(in_features=128, out_features=num_classes)  # Output finale
+
+    def forward(self, x):
+        # Passaggio nei layer convoluzionali con ReLU e MaxPooling
+        x = self.pool(F.relu(self.conv1(x)))  # Conv1 -> ReLU -> MaxPool
+        x = self.pool(F.relu(self.conv2(x)))  # Conv2 -> ReLU -> MaxPool
+        x = self.pool(F.relu(self.conv3(x)))  # Conv3 -> ReLU -> MaxPool
+        
+        # Flatten per il passaggio al fully connected
+        x = x.view(-1, 64 * 10 * 12)  # Flatten (batch_size, features)
+        
+        # Passaggio nei layer fully connected
+        x = F.relu(self.fc1(x))  # Primo fully connected con ReLU
+        x = self.fc2(x)  # Output finale
+        return x
 
 class Net(nn.Module):
     def __init__(self, n_inputs, n_outputs, bias=True):
@@ -42,22 +80,23 @@ class Q_network(nn.Module):
 
         #self.network = Net( ?? , ??)
         print( env.observation_space._shape[0], env.action_space.n)
-        self.network = Net( env.observation_space._shape[0], env.action_space.n)
+        self.network = SimpleCNN(5)
         print("Q network:")
         print(self.network)
 
         self.optimizer = torch.optim.Adam(self.network.parameters(),
-                                          lr=learning_rate)
+                                          1e-3)#lr=learning_rate)
 
     def greedy_action(self, state):
         # greedy action = ??
         # greedy_a = 0
         qvals = self.get_qvals(state)
-        greedy_a = torch.max(qvals, dim=-1)[1].item()
+        greedy_a = int(torch.max(qvals, dim=-1)[1].item())
         return greedy_a
 
     def get_qvals(self, state):
         #out = ???
+        state = state[:, :-12, :]
         out = self.network(state)
         return out
     
@@ -120,13 +159,23 @@ class DDQN_agent:
     def take_step(self, mode='exploit'):
         # choose action with epsilon greedy
         if mode == 'explore':
-                action = self.env.action_space.sample()
+            action = self.env.action_space.sample()
         else:
-                action = self.network.greedy_action(torch.FloatTensor(self.s_0).to(self.device))
+            # Assuming self.s_0 has shape 1x84x3x96
+            self.s_0 = torch.FloatTensor(self.s_0)  # Removes the first dimension -> 84x3x96
+
+            # Permute to change the order of dimensions
+            # From (84, 3, 96) to (3, 96, 84)
+            self.s_0 = self.s_0.permute(2, 1, 0)
+
+            # Ensure it's moved to the correct device
+            self.s_0 = self.s_0.to(self.device)
+            #print(self.s_0.shape)
+            action = self.network.greedy_action(self.s_0)
 
         #simulate action
-        print(action)
-        s_1, r, terminated, truncated, _ = self.env.step(action) ##TODO MODIFY FOR CONTINUOUS
+        #print(action)
+        s_1, r, terminated, truncated, _ = self.env.step(np.int32(action)) ##TODO MODIFY FOR CONTINUOUS
         done = terminated or truncated
 
         #put experience in the buffer
@@ -239,11 +288,11 @@ class DDQN_agent:
         states, actions, rewards, dones, next_states = list(batch)
 
         #transform in torch tensors
-        rewards = torch.FloatTensor(rewards).reshape(-1, 1).to(device)
-        actions = torch.LongTensor(np.array(actions)).reshape(-1, 1).to(device)
-        dones = torch.IntTensor(dones).reshape(-1, 1).to(device)
-        states = from_tuple_to_tensor(states).to(device)
-        next_states = from_tuple_to_tensor(next_states).to(device)
+        rewards = torch.FloatTensor(rewards).reshape(-1, 1).to(self.device)
+        actions = torch.LongTensor(np.array(actions)).reshape(-1, 1).to(self.device)
+        dones = torch.IntTensor(dones).reshape(-1, 1).to(self.device)
+        states = from_tuple_to_tensor(states).to(self.device)
+        next_states = from_tuple_to_tensor(next_states).to(self.device)
 
         ###############
         # DDQN Update #
@@ -287,7 +336,7 @@ class DDQN_agent:
         s, _ = eval_env.reset()
         rew = 0
         while not done:
-            action = self.network.greedy_action(torch.FloatTensor(s).to(device))
+            action = self.network.greedy_action(torch.FloatTensor(s).to(self.device))
             s, r, terminated, truncated, _ = eval_env.step(action)
             done = terminated or truncated
             rew += r
@@ -322,13 +371,14 @@ class Policy(nn.Module):
         return 0
 
     def train(self):
-        env = gym.make('CarRacing-v3', continuous=False, render_mode = "human")
+        env = gym.make('CarRacing-v2', continuous=False)#, render_mode = "human")
+        print(env.action_space)
         #print(env.observation_space.sample())
         rew_threshold = 400
         buffer = Experience_replay_buffer()
         agent = DDQN_agent(env, rew_threshold, buffer,self.device)
         agent.train()
-        eval_env = gym.make("CarRacing-v3", continuous = False,render_mode="human")
+        eval_env = gym.make("CarRacing-v2", continuous = False, render_mode="human")
         agent.evaluate(eval_env)
 
     def save(self):
