@@ -80,7 +80,7 @@ class Q_network(nn.Module):
 
         #self.network = Net( ?? , ??)
         print( env.observation_space._shape[0], env.action_space.n)
-        self.network = SimpleCNN(5)
+        self.network = Net( env.observation_space._shape[0], env.action_space.n)
         print("Q network:")
         print(self.network)
 
@@ -90,13 +90,15 @@ class Q_network(nn.Module):
     def greedy_action(self, state):
         # greedy action = ??
         # greedy_a = 0
+        print(state.shape)
         qvals = self.get_qvals(state)
-        greedy_a = int(torch.max(qvals, dim=-1)[1].item())
+        greedy_a = torch.max(qvals, dim=-1)[1].item()
         return greedy_a
 
     def get_qvals(self, state):
         #out = ???
-        state = state[:, :-12, :]
+        #print(state.shape)
+        #state = state[:, :-12, :]
         out = self.network(state)
         return out
     
@@ -158,20 +160,20 @@ class DDQN_agent:
 
     def take_step(self, mode='exploit'):
         # choose action with epsilon greedy
-        if mode == 'explore':
-            action = self.env.action_space.sample()
-        else:
-            # Assuming self.s_0 has shape 1x84x3x96
-            self.s_0 = torch.FloatTensor(self.s_0)  # Removes the first dimension -> 84x3x96
+        #if mode == 'explore':
+           # action = self.env.action_space.sample()
+        #else:
+        # Assuming self.s_0 has shape 1x84x3x96
+        self.s_0 = torch.FloatTensor(self.s_0)  # Removes the first dimension -> 84x3x96
 
-            # Permute to change the order of dimensions
-            # From (84, 3, 96) to (3, 96, 84)
-            self.s_0 = self.s_0.permute(2, 1, 0)
+        # Permute to change the order of dimensions
+        # From (84, 3, 96) to (3, 96, 84)
+        self.s_0 = self.s_0.permute(2, 1, 0)
 
-            # Ensure it's moved to the correct device
-            self.s_0 = self.s_0.to(self.device)
-            #print(self.s_0.shape)
-            action = self.network.greedy_action(self.s_0)
+        # Ensure it's moved to the correct device
+        self.s_0 = self.s_0.to(self.device)
+        #print(self.s_0.shape)
+        action = self.network.greedy_action(self.s_0)
 
         #simulate action
         #print(action)
