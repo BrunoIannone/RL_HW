@@ -8,7 +8,7 @@ from collections import namedtuple, deque ##
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import time
 import cnn
 
 class Net(nn.Module):
@@ -58,15 +58,15 @@ class Q_network(nn.Module):
     def greedy_action(self, state):
         # greedy action = ??
         # greedy_a = 0
-        print(state.shape)
+        #print(state.shape)
         qvals = self.get_qvals(state)
         greedy_a = torch.max(qvals, dim=-1)[1].item()
         return greedy_a
 
     def get_qvals(self, state):
         #out = ???
-        #print(state.shape)
-        state = state[:, :-12, :]
+        #print(state)
+        #time.sleep(5)
         #print(state.shape)
         out = self.network(state)
         return out
@@ -98,11 +98,11 @@ class Experience_replay_buffer:
         return len(self.replay_memory) / self.memory_size
     
 
-def from_tuple_to_tensor(tuple_of_np):
-    tensor = torch.zeros((len(tuple_of_np), tuple_of_np[0].shape[0]))
-    for i, x in enumerate(tuple_of_np):
-        tensor[i] = torch.FloatTensor(x)
-    return tensor
+# def from_tuple_to_tensor(tuple_of_np):
+#     tensor = torch.zeros((len(tuple_of_np), tuple_of_np[0].shape[0]))
+#     for i, x in enumerate(tuple_of_np):
+#         tensor[i] = torch.FloatTensor(x)
+#     return tensor
 
 
 class DDQN_agent:
@@ -143,23 +143,18 @@ class DDQN_agent:
         if mode == 'explore':
             action = self.env.action_space.sample()
         else:
-            print("CHOOSING WISELY")
+        #print("CHOOSING WISELY")
         #Assuming self.s_0 has shape 1x84x3x96
-        
-            self.s_0 = torch.FloatTensor(self.s_0)  # Removes the first dimension -> 84x3x96
-
-            # Permute to change the order of dimensions
-            # From (84, 3, 96) to (3, 96, 84)
-            self.s_0 = self.s_0.permute(2, 1, 0)
-
-            # Ensure it's moved to the correct device
-            self.s_0 = self.s_0.to(self.device)
-            #print(self.s_0.shape)
+            print("TAKE STEP")
+            self.s_0 = self.handle_state_shape(self.s_0,self.device)
+            
             action = self.network.greedy_action(self.s_0)
 
             #simulate action
             #print(action)
         s_1, r, terminated, truncated, _ = self.env.step(np.int32(action)) ##TODO MODIFY FOR CONTINUOUS
+        s_1 = self.handle_state_shape(s_1,self.device)
+        print("S1 SHAPE",s_1.shape)
         done = terminated or truncated
 
         #put experience in the buffer
@@ -167,12 +162,29 @@ class DDQN_agent:
 
         self.rewards += r
 
-        self.s_0 = s_1.copy()
+        self.s_0 = s_1.detach().clone()
 
         self.step_count += 1
         if done:
             self.s_0, _ = self.env.reset()
+            self.s_0 = self.handle_state_shape(self.s_0,self.device)
         return done
+    
+    
+    def handle_state_shape(self,s_0,device):
+        if s_0.shape == torch.Size([3, 84, 96]):
+            return s_0
+        s_0 = torch.FloatTensor(s_0)  # Removes the first dimension -> 84x3x96
+
+        # Permute to change the order of dimensions
+        # From (84, 3, 96) to (3, 96, 84)
+        s_0 = s_0.permute(2, 1, 0)
+        s_0 =  s_0[:, :-12, :]
+        print("HANDLE",s_0.shape)
+#        time.sleep(5)
+        # Ensure it's moved to the correct device
+        s_0 = s_0.to(device)
+        return s_0
 
     # Implement DQN training algorithm
     def train(self, gamma=0.99, max_episodes=10000,
@@ -182,6 +194,7 @@ class DDQN_agent:
 
         self.loss_function = nn.MSELoss()
         self.s_0, _ = self.env.reset()
+        self.s_0 = self.handle_state_shape(self.s_0,self.device)
 
         # Populate replay buffer
         while self.buffer.burn_in_capacity() < 1:
@@ -192,6 +205,7 @@ class DDQN_agent:
 
         while training: #Begin training
             self.s_0, _ = self.env.reset()
+            self.s_0 = self.handle_state_shape(self.s_0,self.device)
 
             self.rewards = 0
             done = False
@@ -276,13 +290,14 @@ class DDQN_agent:
         rewards = torch.FloatTensor(rewards).reshape(-1, 1).to(self.device)
         actions = torch.LongTensor(np.array(actions)).reshape(-1, 1).to(self.device)
         dones = torch.IntTensor(dones).reshape(-1, 1).to(self.device)
-        states = from_tuple_to_tensor(states).to(self.device)
-        next_states = from_tuple_to_tensor(next_states).to(self.device)
+        #states = from_tuple_to_tensor(states).to(self.device)
+        #next_states = from_tuple_to_tensor(next_states).to(self.device)
 
         ###############
         # DDQN Update #
         ###############
         # Q(s,a) = ??
+        print("LOSS",states)
         qvals = self.network.get_qvals(states)
         qvals = torch.gather(qvals, 1, actions)
 
@@ -300,6 +315,7 @@ class DDQN_agent:
     def update(self):
         self.network.optimizer.zero_grad()
         batch = self.buffer.sample_batch(batch_size=self.batch_size)
+        print(batch)
         loss = self.calculate_loss(batch)
 
         loss.backward()
