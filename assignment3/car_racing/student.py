@@ -9,38 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class SimpleCNN(nn.Module):
-    def __init__(self, num_classes=10):  # Puoi cambiare il numero di classi
-        super(SimpleCNN, self).__init__()
-        # Primo blocco convoluzionale
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3, stride=1, padding=1)  # output: 16 x 84 x 96
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)  # output: 16 x 42 x 48
-
-        # Secondo blocco convoluzionale
-        self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=1, padding=1)  # output: 32 x 42 x 48
-        # Dopo MaxPooling: output: 32 x 21 x 24
-
-        # Terzo blocco convoluzionale
-        self.conv3 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1)  # output: 64 x 21 x 24
-        # Dopo MaxPooling: output: 64 x 10 x 12
-
-        # Fully connected layer
-        self.fc1 = nn.Linear(in_features=64 * 10 * 12, out_features=128)  # Primo livello fully connected
-        self.fc2 = nn.Linear(in_features=128, out_features=num_classes)  # Output finale
-
-    def forward(self, x):
-        # Passaggio nei layer convoluzionali con ReLU e MaxPooling
-        x = self.pool(F.relu(self.conv1(x)))  # Conv1 -> ReLU -> MaxPool
-        x = self.pool(F.relu(self.conv2(x)))  # Conv2 -> ReLU -> MaxPool
-        x = self.pool(F.relu(self.conv3(x)))  # Conv3 -> ReLU -> MaxPool
-        
-        # Flatten per il passaggio al fully connected
-        x = x.view(-1, 64 * 10 * 12)  # Flatten (batch_size, features)
-        
-        # Passaggio nei layer fully connected
-        x = F.relu(self.fc1(x))  # Primo fully connected con ReLU
-        x = self.fc2(x)  # Output finale
-        return x
+import cnn
 
 class Net(nn.Module):
     def __init__(self, n_inputs, n_outputs, bias=True):
@@ -79,7 +48,7 @@ class Q_network(nn.Module):
 
         #self.network = Net( ?? , ??)
         print( env.observation_space._shape[0], env.action_space.n)
-        self.network = Net( env.observation_space._shape[0], env.action_space.n)
+        self.network = cnn.SimpleCNN(5)#Net( env.observation_space._shape[0], env.action_space.n)
         print("Q network:")
         print(self.network)
 
@@ -97,7 +66,8 @@ class Q_network(nn.Module):
     def get_qvals(self, state):
         #out = ???
         #print(state.shape)
-        #state = state[:, :-12, :]
+        state = state[:, :-12, :]
+        #print(state.shape)
         out = self.network(state)
         return out
     
@@ -156,26 +126,39 @@ class DDQN_agent:
         self.step_count = 0
         self.episode = 0
 
+        #### PARAMS ####
+        #self.batch = 10 #minibatch k
+        self.step_size = 0.1 # eta (n greca)
+        self.replay_period = 10 # K (capital k)
+        self.size = 10 # N
+        self.alpha = 1
+        self.beta = 1
+        self.budget = 10 # T
+        #self.replay_memory = [] # H
+        self.delta = 0
+        self.p1 = 1
 
     def take_step(self, mode='exploit'):
         # choose action with epsilon greedy
-        #if mode == 'explore':
-           # action = self.env.action_space.sample()
-        #else:
-        # Assuming self.s_0 has shape 1x84x3x96
-        self.s_0 = torch.FloatTensor(self.s_0)  # Removes the first dimension -> 84x3x96
+        if mode == 'explore':
+            action = self.env.action_space.sample()
+        else:
+            print("CHOOSING WISELY")
+        #Assuming self.s_0 has shape 1x84x3x96
+        
+            self.s_0 = torch.FloatTensor(self.s_0)  # Removes the first dimension -> 84x3x96
 
-        # Permute to change the order of dimensions
-        # From (84, 3, 96) to (3, 96, 84)
-        self.s_0 = self.s_0.permute(2, 1, 0)
+            # Permute to change the order of dimensions
+            # From (84, 3, 96) to (3, 96, 84)
+            self.s_0 = self.s_0.permute(2, 1, 0)
 
-        # Ensure it's moved to the correct device
-        self.s_0 = self.s_0.to(self.device)
-        #print(self.s_0.shape)
-        action = self.network.greedy_action(self.s_0)
+            # Ensure it's moved to the correct device
+            self.s_0 = self.s_0.to(self.device)
+            #print(self.s_0.shape)
+            action = self.network.greedy_action(self.s_0)
 
-        #simulate action
-        #print(action)
+            #simulate action
+            #print(action)
         s_1, r, terminated, truncated, _ = self.env.step(np.int32(action)) ##TODO MODIFY FOR CONTINUOUS
         done = terminated or truncated
 
@@ -206,7 +189,8 @@ class DDQN_agent:
         ep = 0
         training = True
         self.populate = False
-        while training:
+
+        while training: #Begin training
             self.s_0, _ = self.env.reset()
 
             self.rewards = 0
@@ -332,6 +316,10 @@ class DDQN_agent:
         self.rewards = 0
         self.step_count = 0
 
+        ###
+        self.delta = 0
+
+
     def evaluate(self, eval_env):
         done = False
         s, _ = eval_env.reset()
@@ -351,17 +339,7 @@ class Policy(nn.Module):
         super(Policy, self).__init__()
         self.device = device
 
-        #### PARAMS ####
-        self.batch = 10 #minibatch k
-        self.step_size = 0.1 # eta (n greca)
-        self.replay_period = 10 # K (capital k)
-        self.size = 10 # N
-        self.alpha = 1
-        self.beta = 1
-        self.budget = 10 # T
-        self.replay_memory = [] # H
-        self.delta = 0
-        self.p1 = 1
+        
 
     def forward(self, x): # TODO
         
