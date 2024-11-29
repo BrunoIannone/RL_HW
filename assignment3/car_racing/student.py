@@ -53,7 +53,7 @@ class Policy(nn.Module):
         # Or if you want the two networks to start with the same random weights:
         # self.target_network = deepcopy(self.network)
         self.epsilon = 0.5
-        self.batch_size = 64
+        self.batch_size = 32
         self.window = 50
         self.step_count = 0
         self.episode = 0
@@ -72,7 +72,7 @@ class Policy(nn.Module):
         self.replay_period = 10 # K (capital k)
         self.size = 10 # N
         self.alpha = 1
-        self.beta = 1
+        self.beta = 0.6
         self.budget = 10 # T
         #self.replay_memory = [] # H, use self.buffer
         self.delta = 0
@@ -99,7 +99,7 @@ class Policy(nn.Module):
         done = terminated or truncated
 
         #put experience in the buffer
-        self.buffer.append(self.s_0, action, r, terminated, s_1)
+        self.buffer.append(self.s_0, action, r, terminated, s_1,1)
 
         self.rewards += r
 
@@ -112,10 +112,29 @@ class Policy(nn.Module):
             self.s_0 = self.handle_state_shape(self.s_0,self.device)
         return done
     
+
+    def compute_gradient(self, state, action):
+        # Enable gradient tracking
+        # q_values = self.network.get_qvals(state)  # Forward pass
+        # q_value = torch.gather(q_values, 1, action)  # Select Q-value for action
+
+        # # Compute gradients of Q(S_{j-1}, A_{j-1}) with respect to theta
+        # q_value.backward(torch.ones_like(q_value), retain_graph=True)
         
+        gradients = []
+        for param in self.network.parameters():
+            if param.grad is not None:
+                gradients.append(param.grad.clone())  # Store gradient
+
+        return gradients
+    def accumulate_delta(self,td_error, gradients, importance_weight):
+        delta = []
+        for grad in gradients:
+            delta.append(importance_weight * td_error.unsqueeze(-1) * grad)
+        return delta
     def calculate_loss(self, batch):
         #extract info from batch
-        states, actions, rewards, dones, next_states = list(batch)
+        states, actions, rewards, dones, next_states, priority = list(batch)
 
         #transform in torch tensors
         rewards = torch.FloatTensor(rewards).reshape(-1, 1).to(self.device)
@@ -125,6 +144,13 @@ class Policy(nn.Module):
         states = torch.stack(states)
         next_states = torch.stack(next_states)
 
+        is_weights = np.copy(priority)
+        is_weights*= 50000
+        is_weights = ((1/is_weights)**(self.beta))/np.max(is_weights)
+        
+
+
+        
         ###############
         # DDQN Update #
         ###############
@@ -137,8 +163,22 @@ class Policy(nn.Module):
         target_qvals = rewards + (1 - dones)*self.gamma*next_qvals_max
 
         #                       Q(s,a) , target_Q(s,a)
-        loss = self.loss_function(qvals, target_qvals)
+        loss = self.loss_function(qvals, target_qvals) ##gamma
 
+        i = 0
+        #print(loss,loss.shape)
+        #print(self.buffer.sampled_priorities)
+        for priority in self.buffer.sampled_priorities:
+            self.buffer.priorities[priority] = abs(loss.item()) + 0.2
+            i+=1
+
+        gradients = self.compute_gradient(states, actions)
+        delta = self.accumulate_delta( loss, gradients, is_weights)
+        i = 0
+        for param in self.network.parameters():
+            if param.grad is not None:
+                param.grad *= is_weights[i]*loss*delta[i]  # Scale gradients by 0.5
+                i+=1
         return loss
     
     def update(self):
@@ -191,14 +231,14 @@ class Policy(nn.Module):
         self.loss_function = nn.MSELoss()
         self.s_0, _ = self.env.reset()
         self.s_0 = self.handle_state_shape(self.s_0,self.device)
-
+        print("Populating buffer")
         # Populate replay buffer
         while self.buffer.burn_in_capacity() < 1:
             self.take_step(mode='explore')
         ep = 0
         training = True
         self.populate = False
-
+        print("Start training...")
         while training: #Begin training
             self.s_0, _ = self.env.reset()
             self.s_0 = self.handle_state_shape(self.s_0,self.device)
@@ -247,6 +287,8 @@ class Policy(nn.Module):
                     print(
                         "\rEpisode {:d} Mean Rewards {:.2f}  Episode reward = {:.2f}   mean loss = {:.2f}\t\t".format(
                             ep, mean_rewards, self.rewards, mean_loss), end="")
+                    print(
+                        "\n\rPriorities Probabilities size {:d} \t\t".format(len(self.buffer.priorities)), end="")
 
                     if ep >= self.max_episodes:
                         training = False
