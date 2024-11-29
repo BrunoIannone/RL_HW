@@ -10,6 +10,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import time
 import cnn
+import gc
+from exp_replay_buff import *
 
 class Net(nn.Module):
     def __init__(self, n_inputs, n_outputs, bias=True):
@@ -71,31 +73,7 @@ class Q_network(nn.Module):
         out = self.network(state)
         return out
     
-class Experience_replay_buffer:
 
-    def __init__(self, memory_size=50000, burn_in=10000):
-        self.memory_size = memory_size
-        self.burn_in = burn_in
-        self.Buffer = namedtuple('Buffer',
-                                 field_names=['state', 'action', 'reward', 'done', 'next_state'])
-        self.replay_memory = deque(maxlen=memory_size)
-
-    def sample_batch(self, batch_size=32):
-        samples = np.random.choice(len(self.replay_memory), batch_size,
-                                   replace=False)
-        # Use asterisk operator to unpack deque
-        batch = zip(*[self.replay_memory[i] for i in samples])
-        return batch
-
-    def append(self, s_0, a, r, d, s_1):
-        self.replay_memory.append(
-            self.Buffer(s_0, a, r, d, s_1))
-
-    def burn_in_capacity(self):
-        return len(self.replay_memory) / self.burn_in
-
-    def capacity(self):
-        return len(self.replay_memory) / self.memory_size
     
 
 # def from_tuple_to_tensor(tuple_of_np):
@@ -145,16 +123,16 @@ class DDQN_agent:
         else:
         #print("CHOOSING WISELY")
         #Assuming self.s_0 has shape 1x84x3x96
-            print("TAKE STEP")
+            #print("TAKE STEP")
             self.s_0 = self.handle_state_shape(self.s_0,self.device)
             
             action = self.network.greedy_action(self.s_0)
 
             #simulate action
             #print(action)
-        s_1, r, terminated, truncated, _ = self.env.step(np.int32(action)) ##TODO MODIFY FOR CONTINUOUS
+        s_1, r, terminated, truncated, _ = self.env.step(action) ##TODO MODIFY FOR CONTINUOUS
         s_1 = self.handle_state_shape(s_1,self.device)
-        print("S1 SHAPE",s_1.shape)
+        #print("S1 SHAPE",s_1.shape)
         done = terminated or truncated
 
         #put experience in the buffer
@@ -180,7 +158,7 @@ class DDQN_agent:
         # From (84, 3, 96) to (3, 96, 84)
         s_0 = s_0.permute(2, 1, 0)
         s_0 =  s_0[:, :-12, :]
-        print("HANDLE",s_0.shape)
+        #print("HANDLE",s_0.shape)
 #        time.sleep(5)
         # Ensure it's moved to the correct device
         s_0 = s_0.to(device)
@@ -261,10 +239,13 @@ class DDQN_agent:
                         print('\nEnvironment solved in {} episodes!'.format(
                             ep))
                         #break
+            
+
+                    
         # save models
         self.save_models()
         # plot
-        self.plot_training_rewards()
+        #self.plot_training_rewards()
 
     def save_models(self):
         torch.save(self.network, "Q_net")
@@ -292,12 +273,14 @@ class DDQN_agent:
         dones = torch.IntTensor(dones).reshape(-1, 1).to(self.device)
         #states = from_tuple_to_tensor(states).to(self.device)
         #next_states = from_tuple_to_tensor(next_states).to(self.device)
+        states = torch.stack(states)
+        next_states = torch.stack(next_states)
 
         ###############
         # DDQN Update #
         ###############
         # Q(s,a) = ??
-        print("LOSS",states)
+        #print("LOSS",states)
         qvals = self.network.get_qvals(states)
         qvals = torch.gather(qvals, 1, actions)
 
@@ -315,7 +298,7 @@ class DDQN_agent:
     def update(self):
         self.network.optimizer.zero_grad()
         batch = self.buffer.sample_batch(batch_size=self.batch_size)
-        print(batch)
+        #print(batch)
         loss = self.calculate_loss(batch)
 
         loss.backward()
@@ -339,10 +322,12 @@ class DDQN_agent:
     def evaluate(self, eval_env):
         done = False
         s, _ = eval_env.reset()
+        s = self.handle_state_shape(s,self.device)
         rew = 0
         while not done:
             action = self.network.greedy_action(torch.FloatTensor(s).to(self.device))
             s, r, terminated, truncated, _ = eval_env.step(action)
+            s = self.handle_state_shape(s,self.device)
             done = terminated or truncated
             rew += r
 
@@ -361,18 +346,18 @@ class Policy(nn.Module):
         
         return x
     
-    def act(self, state):
+    def act(self, state): #returns action for s = env.step(action)
         # TODO
         return 0
 
     def train(self):
-        env = gym.make('CarRacing-v2', continuous=False)#, render_mode = "human")
+        env = gym.make('CarRacing-v2', continuous=False,render_mode="rgb_array")#, render_mode = "human")
         print(env.action_space)
         #print(env.observation_space.sample())
         rew_threshold = 400
         buffer = Experience_replay_buffer()
         agent = DDQN_agent(env, rew_threshold, buffer,self.device)
-        agent.train()
+        #agent.train()
         eval_env = gym.make("CarRacing-v2", continuous = False, render_mode="human")
         agent.evaluate(eval_env)
 
