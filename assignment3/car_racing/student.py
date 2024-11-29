@@ -55,7 +55,6 @@ class Policy(nn.Module):
         self.epsilon = 0.5
         self.batch_size = 64
         self.window = 50
-        self.initialize()
         self.step_count = 0
         self.episode = 0
 
@@ -75,9 +74,12 @@ class Policy(nn.Module):
         self.alpha = 1
         self.beta = 1
         self.budget = 10 # T
-        #self.replay_memory = [] # H
+        #self.replay_memory = [] # H, use self.buffer
         self.delta = 0
         self.p1 = 1
+
+        self.initialize()
+
 
     def take_step(self, mode='exploit'):
         # choose action with epsilon greedy
@@ -164,9 +166,6 @@ class Policy(nn.Module):
         self.sync_eps = []
         self.rewards = 0
         self.step_count = 0
-
-        ###
-        self.delta = 0
     
     def handle_state_shape(self,s_0,device):
         if s_0.shape == torch.Size([3, 84, 96]): # Ensures no further crops
