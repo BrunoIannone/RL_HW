@@ -32,7 +32,7 @@ def evaluate(env=None, n_episodes=1, render=False):
 def train():
     agent = Policy()
     agent.train()
-    #agent.save()
+    agent.save()
 
 
 def main():

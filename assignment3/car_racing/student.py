@@ -13,33 +13,6 @@ import cnn
 import gc
 from exp_replay_buff import *
 
-class Net(nn.Module):
-    def __init__(self, n_inputs, n_outputs, bias=True):
-        super().__init__()
-        self.activation_function= nn.Tanh()
-
-        self.layer1 = nn.Linear( #<--- linear layer
-            n_inputs, #<----------------#input features
-            64,#<-----------------------#output features
-            bias=bias)#<----------------bias
-
-        self.layer2 = nn.Linear(
-            64,
-            32,
-            bias=bias)
-
-        self.layer3 = nn.Linear(
-                    32,
-                    n_outputs,
-                    bias=bias)
-
-
-    def forward(self, x):
-        x = self.activation_function( self.layer1(x) )
-        x = self.activation_function( self.layer2(x) )
-        y = self.layer3(x)
-
-        return y
 
 class Q_network(nn.Module):
 
@@ -243,25 +216,25 @@ class DDQN_agent:
 
                     
         # save models
-        self.save_models()
+        #self.save_models()
         # plot
         #self.plot_training_rewards()
 
-    def save_models(self):
-        torch.save(self.network, "Q_net")
+    # def save_models(self):
+    #     torch.save(self.network, "Q_net")
 
-    def load_models(self):
-        self.network = torch.load("Q_net")
-        self.network.eval()
+    # def load_models(self):
+    #     self.network = torch.load("Q_net")
+    #     self.network.eval()
 
-    def plot_training_rewards(self):
-        plt.plot(self.mean_training_rewards)
-        plt.title('Mean training rewards')
-        plt.ylabel('Reward')
-        plt.xlabel('Episods')
-        plt.show()
-        plt.savefig('mean_training_rewards.png')
-        plt.clf()
+    # def plot_training_rewards(self):
+    #     plt.plot(self.mean_training_rewards)
+    #     plt.title('Mean training rewards')
+    #     plt.ylabel('Reward')
+    #     plt.xlabel('Episods')
+    #     plt.show()
+    #     plt.savefig('mean_training_rewards.png')
+    #     plt.clf()
 
     def calculate_loss(self, batch):
         #extract info from batch
@@ -319,47 +292,57 @@ class DDQN_agent:
         self.delta = 0
 
 
-    def evaluate(self, eval_env):
-        done = False
-        s, _ = eval_env.reset()
-        s = self.handle_state_shape(s,self.device)
-        rew = 0
-        while not done:
-            action = self.network.greedy_action(torch.FloatTensor(s).to(self.device))
-            s, r, terminated, truncated, _ = eval_env.step(action)
-            s = self.handle_state_shape(s,self.device)
-            done = terminated or truncated
-            rew += r
+    # def evaluate(self, eval_env):
+    #     done = False
+    #     s, _ = eval_env.reset()
+    #     s = self.handle_state_shape(s,self.device)
+    #     rew = 0
+    #     while not done:
+    #         action = self.network.greedy_action(torch.FloatTensor(s).to(self.device))
+    #         s, r, terminated, truncated, _ = eval_env.step(action)
+    #         s = self.handle_state_shape(s,self.device)
+    #         done = terminated or truncated
+    #         rew += r
 
-        print("Evaluation cumulative reward: ", rew)
+    #     print("Evaluation cumulative reward: ", rew)
 
 class Policy(nn.Module):
-    continuous = True # you can change this
+    continuous = False # you can change this
 
     def __init__(self, device=torch.device('cpu')):
         super(Policy, self).__init__()
         self.device = device
+        self.env = gym.make('CarRacing-v2', continuous=False,render_mode="rgb_array")#, render_mode = "human")
+        rew_threshold = 400
+        self.buffer = Experience_replay_buffer()
+        self.agent = DDQN_agent(self.env, rew_threshold, self.buffer,self.device)  
 
+    #def forward(self, x): # TODO
         
+    #    return x
+    def handle_state_shape(self,s_0,device):
+        if s_0.shape == torch.Size([3, 84, 96]):
+            return s_0
+        s_0 = torch.FloatTensor(s_0)  # Removes the first dimension -> 84x3x96
 
-    def forward(self, x): # TODO
-        
-        return x
-    
+        # Permute to change the order of dimensions
+        # From (84, 3, 96) to (3, 96, 84)
+        s_0 = s_0.permute(2, 1, 0)
+        s_0 =  s_0[:, :-12, :]
+        #print("HANDLE",s_0.shape)
+#        time.sleep(5)
+        # Ensure it's moved to the correct device
+        s_0 = s_0.to(device)
+        return s_0
     def act(self, state): #returns action for s = env.step(action)
-        # TODO
-        return 0
+        state = self.handle_state_shape(state,self.device)
+        return self.agent.network.greedy_action(state)
+         
 
     def train(self):
-        env = gym.make('CarRacing-v2', continuous=False,render_mode="rgb_array")#, render_mode = "human")
-        print(env.action_space)
-        #print(env.observation_space.sample())
-        rew_threshold = 400
-        buffer = Experience_replay_buffer()
-        agent = DDQN_agent(env, rew_threshold, buffer,self.device)
-        #agent.train()
-        eval_env = gym.make("CarRacing-v2", continuous = False, render_mode="human")
-        agent.evaluate(eval_env)
+        
+        self.agent.train()
+        
 
     def save(self):
         torch.save(self.state_dict(), 'model.pt')
