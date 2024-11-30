@@ -72,7 +72,7 @@ class Policy(nn.Module):
         self.replay_period = 10 # K (capital k)
         self.size = 10 # N
         self.alpha = 1
-        self.beta = 0.6
+        self.beta = 1
         self.budget = 10 # T
         #self.replay_memory = [] # H, use self.buffer
         self.delta = 0
@@ -99,7 +99,7 @@ class Policy(nn.Module):
         done = terminated or truncated
 
         #put experience in the buffer
-        self.buffer.append(self.s_0, action, r, terminated, s_1,1)
+        self.buffer.append(self.s_0, action, r, terminated, s_1)
 
         self.rewards += r
 
@@ -113,7 +113,7 @@ class Policy(nn.Module):
         return done
     
 
-    def compute_gradient(self, state, action):
+    def compute_gradient(self):
         # Enable gradient tracking
         # q_values = self.network.get_qvals(state)  # Forward pass
         # q_value = torch.gather(q_values, 1, action)  # Select Q-value for action
@@ -129,28 +129,29 @@ class Policy(nn.Module):
         return gradients
     def accumulate_delta(self,td_error, gradients, importance_weight):
         delta = []
+        i = 0
         for grad in gradients:
-            delta.append(importance_weight * td_error.unsqueeze(-1) * grad)
+            delta.append(importance_weight[i] * td_error * grad)
+            i+=1
         return delta
     def calculate_loss(self, batch):
         #extract info from batch
-        states, actions, rewards, dones, next_states, priority = list(batch)
+        #print(list(batch))
+        #print(list(batch))
+        states, actions, rewards, dones, next_states =  zip(*batch)
 
+        
+        #states, actions, rewards, dones, next_states= list(batch)
+        #states, actions, rewards, dones, next_states  
         #transform in torch tensors
         rewards = torch.FloatTensor(rewards).reshape(-1, 1).to(self.device)
         actions = torch.LongTensor(np.array(actions)).reshape(-1, 1).to(self.device)
+        #print(dones)
         dones = torch.IntTensor(dones).reshape(-1, 1).to(self.device)
         
         states = torch.stack(states)
         next_states = torch.stack(next_states)
 
-        is_weights = np.copy(priority)
-        is_weights*= 50000
-        is_weights = ((1/is_weights)**(self.beta))/np.max(is_weights)
-        
-
-
-        
         ###############
         # DDQN Update #
         ###############
@@ -165,20 +166,7 @@ class Policy(nn.Module):
         #                       Q(s,a) , target_Q(s,a)
         loss = self.loss_function(qvals, target_qvals) ##gamma
 
-        i = 0
-        #print(loss,loss.shape)
-        #print(self.buffer.sampled_priorities)
-        for priority in self.buffer.sampled_priorities:
-            self.buffer.priorities[priority] = abs(loss.item()) + 0.2
-            i+=1
-
-        gradients = self.compute_gradient(states, actions)
-        delta = self.accumulate_delta( loss, gradients, is_weights)
-        i = 0
-        for param in self.network.parameters():
-            if param.grad is not None:
-                param.grad *= is_weights[i]*loss*delta[i]  # Scale gradients by 0.5
-                i+=1
+       
         return loss
     
     def update(self):
@@ -187,7 +175,29 @@ class Policy(nn.Module):
 
         loss = self.calculate_loss(batch)
 
+        is_weights = self.buffer.replay_memory["priority"]
+        is_weights*= len(self.buffer.replay_memory)
+        is_weights = ((1/is_weights)**(self.beta))/is_weights.max()
+
+        i = 0
+        
+        # print(loss,loss.shape)
+        # print(self.buffer.sampled_priorities)
+        # for priority in self.buffer.sampled_priorities:
+            
+        self.buffer.replay_memory["priority"][self.buffer.sampled_priorities] = abs(loss.item()) + 1e-6
+        i+=1
+
         loss.backward()
+        gradients = self.compute_gradient()
+        delta = self.accumulate_delta(loss, gradients, is_weights)
+        i = 0
+        for param in self.network.parameters():
+            if param.grad is not None:
+                param.grad *= delta[i]  # Scale gradients by 0.5
+                i+=1
+        delta = []
+
         self.network.optimizer.step()
 
         self.update_loss.append(loss.item())
@@ -287,8 +297,8 @@ class Policy(nn.Module):
                     print(
                         "\rEpisode {:d} Mean Rewards {:.2f}  Episode reward = {:.2f}   mean loss = {:.2f}\t\t".format(
                             ep, mean_rewards, self.rewards, mean_loss), end="")
-                    print(
-                        "\n\rPriorities Probabilities size {:d} \t\t".format(len(self.buffer.priorities)), end="")
+                    # print(
+                    #     "\n\rPriorities Probabilities size {:d} \t\t".format(len(self.buffer.priorities)), end="")
 
                     if ep >= self.max_episodes:
                         training = False

@@ -3,40 +3,50 @@ from collections import namedtuple, deque ##
 
 class Experience_replay_buffer:
 
-    def __init__(self, memory_size=50000, burn_in=10000):
+    def __init__(self, memory_size=5000, burn_in=1000):
+        
+
         self.memory_size = memory_size
         self.burn_in = burn_in
         self.Buffer = namedtuple('Buffer',
-                                 field_names=['state', 'action', 'reward', 'done', 'next_state','priority'])
-        self.replay_memory = deque(maxlen=memory_size)
+                                 field_names=['state', 'action', 'reward', 'done', 'next_state'])
+        self.replay_memory = np.empty(self.memory_size, dtype=[("priority", np.float32), ("experience", self.Buffer)]) #deque(maxlen=memory_size)
+        print("ORCOD",self.replay_memory.size)
         #self.priorities_sum = 0
-        self.priorities = deque(maxlen=memory_size)
+        self.priorities = np.array([]) #deque(maxlen=memory_size)
         self.priorities_prob = np.array([])
         self.alpha = 0.6
         self.sampled_priorities = np.array([])
+        self._buffer_length = 0 # current number of prioritized experience tuples in buffer
+
     def sample_batch(self, batch_size=32):
 
-        samples = np.random.choice(len(self.replay_memory), batch_size,
-                                   replace=False,p = self.compute_probability(self.priorities))
+        samples = np.random.choice(np.arange((self.replay_memory[:self._buffer_length]["priority"]).size), batch_size,
+                                   replace=True,p = self.compute_probability())
         self.sampled_priorities = samples
         # Use asterisk operator to unpack deque
-        batch = zip(*[self.replay_memory[i] for i in samples])
-        return batch
-
-    def append(self, s_0, a, r, d, s_1,p):
+        #batch = zip(*[self.replay_memory[i] for i in samples])
+        #select the experiences and compute sampling weights
+        experiences = self.replay_memory["experience"][samples]        
         
-        self.replay_memory.append(
-            self.Buffer(s_0, a, r, d, s_1,p))
-        #print("Pre append",self.priorities)
-        self.priorities.append(p)
-        #print(len(self.priorities))
-        # if(len(self.priorities)>=self.memory_size):
-        #     np.delete(self.priorities,0)
-        #print("AFTER APPEND",len(self.priorities))
-        #print(
-        #      "\rPriorities size {:d} \t\t".format(len(self.priorities)), end="")
+        #return samples, experiences
+        return experiences
 
-        #print("post_append",self.priorities)
+
+    def append(self, s_0, a, r, d, s_1):
+        priority = 1.0 if self._buffer_length == 0 else self.replay_memory["priority"].max()
+        if self._buffer_length==self.memory_size:
+            if priority > self.replay_memory["priority"].min():
+                idx = self.replay_memory["priority"].argmin()
+                self.replay_memory[idx] = (priority, self.Buffer(s_0, a, r, d, s_1))
+            else:
+                pass # low priority experiences should not be included in buffer
+        else:
+            self.replay_memory[self._buffer_length]=(priority, self.Buffer(s_0, a, r, d, s_1))
+            self._buffer_length += 1
+
+        
+        
 
     def burn_in_capacity(self):
         return len(self.replay_memory) / self.burn_in
@@ -47,9 +57,12 @@ class Experience_replay_buffer:
     def sum_scaled_priorities(self,scaled_priorities):
         return np.sum(scaled_priorities)
     
-    def compute_probability(self, priorities):
-        scaled_priorities = np.array(priorities)**self.alpha
-        self.priorities_prob = (scaled_priorities)/self.sum_scaled_priorities(scaled_priorities)
+    def compute_probability(self):
+        scaled_priorities = (self.replay_memory[:self._buffer_length]["priority"])
+        #print(self._buffer_length)
+        
+        self.priorities_prob = (scaled_priorities**self.alpha)/np.sum(scaled_priorities**self.alpha)
+        print("PRIORITIES",scaled_priorities,"SUM",np.sum(scaled_priorities))
         #print(
        #       "\rPriorities Probabilities size {:d} \t\t".format(len(self.priorities)), end="")
         return self.priorities_prob
