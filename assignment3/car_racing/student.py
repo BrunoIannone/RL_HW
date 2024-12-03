@@ -164,40 +164,50 @@ class Policy(nn.Module):
         target_qvals = rewards + (1 - dones)*self.gamma*next_qvals_max
 
         #                       Q(s,a) , target_Q(s,a)
+        
+        delta = qvals - target_qvals
         loss = self.loss_function(qvals, target_qvals) ##gamma
 
        
-        return loss
+        return delta,loss
     
     def update(self):
         self.network.optimizer.zero_grad()
         batch = self.buffer.sample_batch(batch_size=self.batch_size)
 
-        loss = self.calculate_loss(batch)
+        delta,loss = self.calculate_loss(batch)
 
-        is_weights = self.buffer.replay_memory["priority"]
-        is_weights*= len(self.buffer.replay_memory)
+        is_weights = self.buffer.replay_memory["priority"][self.buffer.sampled_priorities]
+        #print("IS", is_weights)
+        is_weights*= self.buffer._buffer_length
         is_weights = ((1/is_weights)**(self.beta))/is_weights.max()
 
         i = 0
         
         # print(loss,loss.shape)
         # print(self.buffer.sampled_priorities)
-        # for priority in self.buffer.sampled_priorities:
-            
-        self.buffer.replay_memory["priority"][self.buffer.sampled_priorities] = abs(loss.item()) + 1e-6
+        #for priority in self.buffer.sampled_priorities:
+            #print(self.buffer.replay_memory["priority"][priority])    
+            #time.sleep(5)
+            #print("---")
+        #print(len(delta))
+        self.buffer.replay_memory["priority"][self.buffer.sampled_priorities] = delta.abs().cpu().detach().numpy().flatten() + 1e-6
         i+=1
+        #is_weights = (torch.Tensor(is_weights)
+        #                          .view((-1, 1)))
+        #loss = torch.mean((delta * is_weights)**2)
+        #print(loss)
 
-        loss.backward()
-        gradients = self.compute_gradient()
-        delta = self.accumulate_delta(loss, gradients, is_weights)
+        
+        #gradients = self.compute_gradient()
+        #DELTA = self.accumulate_delta(loss, gradients, is_weights)
         i = 0
         for param in self.network.parameters():
             if param.grad is not None:
-                param.grad *= delta[i]  # Scale gradients by 0.5
+                param.grad *= is_weights[i] * delta[i] # Scale gradients by 0.5
                 i+=1
-        delta = []
-
+        #DELTA = []
+        loss.backward()
         self.network.optimizer.step()
 
         self.update_loss.append(loss.item())

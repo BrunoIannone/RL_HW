@@ -3,7 +3,7 @@ from collections import namedtuple, deque ##
 
 class Experience_replay_buffer:
 
-    def __init__(self, memory_size=5000, burn_in=1000):
+    def __init__(self, memory_size=50000, burn_in=10000):
         
 
         self.memory_size = memory_size
@@ -62,7 +62,7 @@ class Experience_replay_buffer:
         #print(self._buffer_length)
         
         self.priorities_prob = (scaled_priorities**self.alpha)/np.sum(scaled_priorities**self.alpha)
-        print("PRIORITIES",scaled_priorities,"SUM",np.sum(scaled_priorities))
+        #print("PRIORITIES",scaled_priorities,"SUM",np.sum(scaled_priorities))
         #print(
        #       "\rPriorities Probabilities size {:d} \t\t".format(len(self.priorities)), end="")
         return self.priorities_prob
