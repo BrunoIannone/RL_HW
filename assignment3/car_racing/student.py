@@ -16,7 +16,7 @@ from exp_replay_buff import *
 
 class Q_network(nn.Module):
 
-    def __init__(self, env,  learning_rate=1e-4):
+    def __init__(self, env,  learning_rate=1e-3):
         super(Q_network, self).__init__()
 
         n_outputs = env.action_space.n
@@ -72,14 +72,19 @@ class Policy(nn.Module):
         self.replay_period = 10 # K (capital k)
         self.size = 10 # N
         self.alpha = 1
-        self.beta = 1
+        self.beta = 1e-2
+
         self.budget = 10 # T
         #self.replay_memory = [] # H, use self.buffer
         self.delta = 0
         self.p1 = 1
+        self.beta_annealing_schedule= lambda n: self.exponential_annealing_schedule(n, 1e-2)
+
 
         self.initialize()
 
+    def exponential_annealing_schedule(self,n, rate):
+        return 1 - np.exp(-rate * n)
 
     def take_step(self, mode='exploit'):
         # choose action with epsilon greedy
@@ -165,8 +170,20 @@ class Policy(nn.Module):
 
         #                       Q(s,a) , target_Q(s,a)
         
-        delta = qvals - target_qvals
-        loss = self.loss_function(qvals, target_qvals) ##gamma
+        is_weights = self.buffer.replay_memory["priority"][self.buffer.sampled_priorities]
+        is_weights*= self.buffer._buffer_length
+        #print(len(is_weights))
+        #print(self.buffer._buffer_length)
+        is_weights = ((is_weights)**(-self.beta))
+        is_weights /= is_weights.max()
+        #print(is_weights)
+        delta =  target_qvals - qvals
+        #print(delta)
+
+       
+        is_weights = (torch.Tensor(is_weights)
+                                  .view((-1)))
+        loss = torch.mean((delta * is_weights)**2)
 
        
         return delta,loss
@@ -177,11 +194,7 @@ class Policy(nn.Module):
 
         delta,loss = self.calculate_loss(batch)
 
-        is_weights = self.buffer.replay_memory["priority"][self.buffer.sampled_priorities]
-        #print("IS", is_weights)
-        is_weights*= self.buffer._buffer_length
-        is_weights = ((1/is_weights)**(self.beta))/is_weights.max()
-
+        
         i = 0
         
         # print(loss,loss.shape)
@@ -194,19 +207,21 @@ class Policy(nn.Module):
         self.buffer.replay_memory["priority"][self.buffer.sampled_priorities] = delta.abs().cpu().detach().numpy().flatten() + 1e-6
         i+=1
         #is_weights = (torch.Tensor(is_weights)
-        #                          .view((-1, 1)))
-        #loss = torch.mean((delta * is_weights)**2)
+        #                          .view((-1)))
+        #loss *=  is_weights
         #print(loss)
 
         
         #gradients = self.compute_gradient()
         #DELTA = self.accumulate_delta(loss, gradients, is_weights)
-        i = 0
-        for param in self.network.parameters():
-            if param.grad is not None:
-                param.grad *= is_weights[i] * delta[i] # Scale gradients by 0.5
-                i+=1
+        # i = 0
+        # for param in self.network.parameters():
+        #     if param.grad is not None:
+        #         param.grad *= is_weights[i] * delta[i] # Scale gradients by 0.5
+        #         i+=1
         #DELTA = []
+        self.network.optimizer.zero_grad()
+
         loss.backward()
         self.network.optimizer.step()
 
@@ -243,6 +258,7 @@ class Policy(nn.Module):
     
     def act(self, state): #returns action for s = env.step(action)
         state = self.handle_state_shape(state,self.device)
+        self.network.eval()
         return self.network.greedy_action(state)
          
 
@@ -279,10 +295,12 @@ class Policy(nn.Module):
                 # Update network
                 if self.step_count % self.network_update_frequency == 0:
                     self.update()
+                    self.beta = self.beta_annealing_schedule(ep)
                 # Sync networks
                 if self.step_count % self.network_sync_frequency == 0:
                     self.target_network.load_state_dict(self.network.state_dict())
                     self.sync_eps.append(ep)
+                    
 
                 if done:
                     if self.epsilon >= 0.05:
@@ -305,8 +323,8 @@ class Policy(nn.Module):
                     mean_loss = np.mean(self.training_loss[-self.window:])
                     self.mean_training_rewards.append(mean_rewards)
                     print(
-                        "\rEpisode {:d} Mean Rewards {:.2f}  Episode reward = {:.2f}   mean loss = {:.2f}\t\t".format(
-                            ep, mean_rewards, self.rewards, mean_loss), end="")
+                        "\rEpisode {:d} Mean Rewards {:.2f}  Episode reward = {:.2f}   mean loss = {:.2f} Beta = {:.2f}\t\t".format(
+                            ep, mean_rewards, self.rewards, mean_loss,self.beta), end="")
                     # print(
                     #     "\n\rPriorities Probabilities size {:d} \t\t".format(len(self.buffer.priorities)), end="")
 

@@ -15,7 +15,7 @@ class Experience_replay_buffer:
         #self.priorities_sum = 0
         self.priorities = np.array([]) #deque(maxlen=memory_size)
         self.priorities_prob = np.array([])
-        self.alpha = 0.6
+        self.alpha = 0.5
         self.sampled_priorities = np.array([])
         self._buffer_length = 0 # current number of prioritized experience tuples in buffer
 
