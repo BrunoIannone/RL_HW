@@ -12,7 +12,7 @@ import time
 import cnn
 import gc
 from exp_replay_buff import *
-
+import matplotlib.pyplot as plt
 
 class Q_network(nn.Module):
 
@@ -44,7 +44,7 @@ class Policy(nn.Module):
         super(Policy, self).__init__()
         self.device = device
         self.env = gym.make('CarRacing-v2', continuous=False,render_mode="rgb_array")#, render_mode = "human")
-        self.reward_threshold = 400
+        self.reward_threshold = 800
         self.buffer = Experience_replay_buffer()
         #self.agent = DDQN_agent(self.env, self.reward_threshold, self.buffer,self.device)  
         self.learning_rate = 1e-3
@@ -337,6 +337,8 @@ class Policy(nn.Module):
                         print('\nEnvironment solved in {} episodes!'.format(
                             ep))
                         #break
+        self.save()
+        self.plot_training_rewards()
 
     def save(self):
         torch.save(self.state_dict(), 'model.pt')
@@ -348,3 +350,11 @@ class Policy(nn.Module):
         ret = super().to(device)
         ret.device = device
         return ret
+    def plot_training_rewards(self):
+        plt.plot(self.mean_training_rewards)
+        plt.title('Mean training rewards')
+        plt.ylabel('Reward')
+        plt.xlabel('Episods')
+        plt.show()
+        plt.savefig('mean_training_rewards.png')
+        plt.clf()
