@@ -5,15 +5,13 @@ class Experience_replay_buffer:
 
     def __init__(self, memory_size=50000, burn_in=10000):
         
-
         self.memory_size = memory_size
         self.burn_in = burn_in
         self.Buffer = namedtuple('Buffer',
                                  field_names=['state', 'action', 'reward', 'done', 'next_state'])
         self.replay_memory = np.empty(self.memory_size, dtype=[("priority", np.float32), ("experience", self.Buffer)]) #deque(maxlen=memory_size)
-        print("ORCOD",self.replay_memory.size)
-        #self.priorities_sum = 0
-        self.priorities = np.array([]) #deque(maxlen=memory_size)
+        
+        self.priorities = np.array([])
         self.priorities_prob = np.array([])
         self.alpha = 0.5
         self.sampled_priorities = np.array([])
@@ -24,14 +22,10 @@ class Experience_replay_buffer:
         samples = np.random.choice(np.arange((self.replay_memory[:self._buffer_length]["priority"]).size), batch_size,
                                    replace=True,p = self.compute_probability())
         self.sampled_priorities = samples
-        # Use asterisk operator to unpack deque
-        #batch = zip(*[self.replay_memory[i] for i in samples])
-        #select the experiences and compute sampling weights
+        
         experiences = self.replay_memory["experience"][samples]        
         
-        #return samples, experiences
         return experiences
-
 
     def append(self, s_0, a, r, d, s_1):
         priority = 1.0 if self._buffer_length == 0 else self.replay_memory["priority"].max()
@@ -45,9 +39,6 @@ class Experience_replay_buffer:
             self.replay_memory[self._buffer_length]=(priority, self.Buffer(s_0, a, r, d, s_1))
             self._buffer_length += 1
 
-        
-        
-
     def burn_in_capacity(self):
         return len(self.replay_memory) / self.burn_in
 
@@ -59,10 +50,6 @@ class Experience_replay_buffer:
     
     def compute_probability(self):
         scaled_priorities = (self.replay_memory[:self._buffer_length]["priority"])
-        #print(self._buffer_length)
         
         self.priorities_prob = (scaled_priorities**self.alpha)/np.sum(scaled_priorities**self.alpha)
-        #print("PRIORITIES",scaled_priorities,"SUM",np.sum(scaled_priorities))
-        #print(
-       #       "\rPriorities Probabilities size {:d} \t\t".format(len(self.priorities)), end="")
         return self.priorities_prob
